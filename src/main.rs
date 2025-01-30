@@ -121,7 +121,7 @@ fn generate_review_prompt(coworker: &str, reviews: &Vec<Review>) -> String {
         .iter()
         .map(|r| format!("Date: {}\nContent:\n{}\n---\n", r.date, r.content))
         .collect::<String>();
-
+    // r# mean raw string
     format!(
         r#"Based on the following work logs for {}, please provide a comprehensive quarterly review. For each category, provide a rating and detailed explanation with specific examples from the work logs:
 

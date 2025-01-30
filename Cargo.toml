@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 inquire = "0.6"
 chrono = "0.4"
+anthropic = "0.0.8"
