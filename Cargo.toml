@@ -9,3 +9,9 @@ edition = "2021"
 inquire = "0.6"
 chrono = "0.4"
 anthropic = "0.0.8"
+dotenv = "0.15.0"
+tokio = { version = "1.0", features = ["full"] }
+env_logger = "0.11.6"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

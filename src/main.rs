@@ -1,5 +1,9 @@
+use anthropic::client::Client;
+use anthropic::config::AnthropicConfig;
+use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use chrono::Local;
 use chrono::{Datelike, NaiveDate};
+use dotenv::dotenv;
 use inquire::Select;
 use std::collections::HashMap;
 use std::fmt;
@@ -246,7 +250,52 @@ Work logs for review:
     )
 }
 
-fn main() {
+async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Load the environment variables from the .env file.
+    dotenv().ok();
+
+    // Build from configuration.
+    let cfg = AnthropicConfig::new()?;
+    let client = Client::try_from(cfg)?;
+
+    let messages = vec![
+        Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text {
+                text: "You are a professional HR consultant who specializes in performance review analysis. If reviewee is not manager, please skip manager's question. When evaluating performance, if no outstanding achievements or major issues are noted, please give a neutral score of 3 out of 5 to represent meeting basic expectations. Please be objective and fair in your assessment.".to_string(),
+            }],
+        },
+        Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text {
+                text: prompt.to_string(),
+            }],
+        },
+    ];
+
+    let messages_request = MessagesRequestBuilder::default()
+        .messages(messages)
+        .model("claude-3-5-sonnet-20241022".to_string())
+        .max_tokens(1024usize)
+        .build()?;
+
+    let response = client.messages(messages_request).await?;
+
+    // 从响应中提取文本
+    response
+        .content
+        .first()
+        .and_then(|block| match block {
+            ContentBlock::Text { text } => Some(text.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| "No response content received".into())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize the logger.
+    env_logger::init();
     // get current year
     let current_year = Local::now().year();
     // quarters list
@@ -288,17 +337,45 @@ fn main() {
                 println!("No reviews found for this quarter.");
             } else {
                 println!(
-                    "\nFound reviews for {} coworkers:",
+                    "\nFound reviews for {} coworkers",
                     reviews_by_coworker.len()
                 );
+
+                // Create review_results directory if it doesn't exist
+                fs::create_dir_all("review_results")?;
+
                 for (coworker, reviews) in reviews_by_coworker {
-                    println!("\n=== Generated prompt for {} ===\n", coworker);
+                    println!("\n=== Processing review for {} ===\n", coworker);
+
                     let prompt = generate_review_prompt(&coworker, &reviews);
-                    println!("{}", prompt);
-                    println!("\n=== End of prompt for {} ===\n", coworker);
+                    match get_claude_review(&prompt).await {
+                        Ok(review) => {
+                            // Save to MD file
+                            let filename = format!(
+                                "review_results/{}_{}_Q{}_review.md",
+                                selected.year, coworker, selected.quarter
+                            );
+
+                            fs::write(&filename, &review)?;
+                            println!("Review saved to: {}", filename);
+
+                            // Print the review content
+                            println!("\nReview content for {}:", coworker);
+                            println!("{}", review);
+                            println!("\n=== End of review for {} ===\n", coworker);
+                        }
+                        Err(e) => {
+                            println!("Error generating review for {}: {}", coworker, e);
+                        }
+                    }
                 }
+
+                println!(
+                    "\nAll reviews have been processed and saved to the review_results directory."
+                );
             }
         }
         Err(_) => println!("There was an error, please try again"),
     }
+    Ok(())
 }
