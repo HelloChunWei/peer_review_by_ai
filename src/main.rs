@@ -1,6 +1,7 @@
 use chrono::Local;
 use chrono::{Datelike, NaiveDate};
 use inquire::Select;
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -67,29 +68,39 @@ fn read_review_from_file(path: &Path) -> Option<Review> {
 
 // Filter reviews by quarter and skip others
 // Returns a vector of reviews that match the given quarter
-fn get_reviews_for_quarter(quarter: &Quarter) -> Vec<Review> {
-    let mut reviews = Vec::new();
+fn get_reviews_for_quarter(quarter: &Quarter) -> HashMap<String, Vec<Review>> {
+    let mut reviews_by_coworker: HashMap<String, Vec<Review>> = HashMap::new();
 
-    // Read reviews directory
     let reviews_dir = Path::new("reviews");
     if !reviews_dir.exists() {
         println!("Reviews directory not found!");
-        return reviews;
+        return reviews_by_coworker;
     }
 
-    // Iterate through all files in the directory
     if let Ok(entries) = fs::read_dir(reviews_dir) {
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
 
-                // Check if it's a .md file
                 if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    // Try to read the review
                     if let Some(review) = read_review_from_file(&path) {
-                        // Check if the date is within the selected quarter
+                        //  unlike other language
+                        /*
+                        // for example java:
+                            if (map.containsKey("Alex")) {
+                                map.get("Alex").add(review);
+                            } else {
+                                List<Review> list = new ArrayList<>();
+                                list.add(review);
+                                map.put("Alex", list);
+                            }
+                         */
+                        // but we don't do that in rust
                         if quarter.contains_date(review.date) {
-                            reviews.push(review);
+                            reviews_by_coworker
+                                .entry(review.coworker.clone()) // get key name
+                                .or_insert_with(Vec::new) // if key is not exist, create Vec
+                                .push(review);
                         }
                     }
                 }
@@ -97,9 +108,142 @@ fn get_reviews_for_quarter(quarter: &Quarter) -> Vec<Review> {
         }
     }
 
-    // Sort by date
-    reviews.sort_by_key(|r| r.date);
-    reviews
+    // Sort reviews by date for each coworker
+    for reviews in reviews_by_coworker.values_mut() {
+        reviews.sort_by_key(|r| r.date);
+    }
+
+    reviews_by_coworker
+}
+
+fn generate_review_prompt(coworker: &str, reviews: &Vec<Review>) -> String {
+    let reviews_text = reviews
+        .iter()
+        .map(|r| format!("Date: {}\nContent:\n{}\n---\n", r.date, r.content))
+        .collect::<String>();
+
+    format!(
+        r#"Based on the following work logs for {}, please provide a comprehensive quarterly review. For each category, provide a rating and detailed explanation with specific examples from the work logs:
+
+1. Working Frequency
+Rate how closely you worked with {} this quarter:
+- Never
+- Almost never
+- Sometimes
+- Frequently
+- Daily
+
+2. Core Competencies (Rate each as: Unsatisfactory/Improvement needed/Meets expectations/Exceeds expectations/Truly exceptional/Not Applicable)
+
+Work Quality:
+- Accuracy and thoroughness
+- Productivity and competence
+- Detailed explanation required
+
+Problem Solving:
+- Reasoning and analysis capabilities
+- Solution identification
+- Willingness to tackle problems
+- Acceptance of new responsibilities
+
+Work Independence and Autonomy:
+- Quality of work with minimal guidance
+- Self-sufficiency in delivery
+- Independence from management oversight
+
+Attitude:
+- Respect for others
+- Initiative taking
+- Handling mistakes and criticism
+- Active listening
+
+Leadership:
+- Emerging leadership skills
+- Project leadership
+- Proactiveness
+- Personal ownership of results
+
+Teamwork:
+- Collaboration within and across teams
+- Relationship maintenance with colleagues
+
+Communication:
+- Clarity and timeliness
+- Transparency in work progress
+- Information sharing with team members
+
+Engagement:
+- Participation in discussions
+- Solution proposal
+- Constructive disagreement when needed
+
+Company Goals:
+- Contribution to annual company objectives
+- Alignment with organizational aims
+
+Security:
+- Adherence to Information Security Policy
+- Security practice implementation
+- Computer locking when away from desk
+
+Professional Etiquette:
+- Meeting punctuality
+- Compliance with company policies
+- Professional conduct
+
+3. Managerial Assessment (if applicable)
+For each item, rate as: Unsatisfactory/Improvement needed/Meets expectations/Exceeds expectations/Truly exceptional/Not Applicable
+
+Mentoring:
+- Support and guidance for junior team members
+
+Management Skills:
+- Career growth promotion
+- Challenge assignment
+- Mentoring of other leads
+- Effective delegation
+
+Team Culture:
+- Fostering positive environment
+- Supporting collaboration
+
+Industry Visibility:
+- Conference participation
+- Public speaking
+- Blog post writing
+- Meetup hosting
+
+Vision Communication:
+- Company vision understanding and explanation
+- Strategic direction setting
+- Goal alignment
+- Operating Principles promotion
+
+4. Strengths and Continuity
+Provide specific examples of:
+- Notable achievements this quarter
+- Successful projects
+- Positive behaviors to continue
+- Areas of excellence
+
+5. Areas for Improvement
+Specify which areas need development (select and explain):
+A. Communication
+B. Work quality
+C. Teamwork
+D. Proactiveness
+E. Accountability
+F. Attention to detail
+G. Other
+
+6. Additional Comments
+Provide any other relevant feedback or suggestions for {}'s development.
+
+Work logs for review:
+
+{}"#,
+        coworker, coworker, coworker, reviews_text
+    )
 }
 
 fn main() {
@@ -137,16 +281,21 @@ fn main() {
         Ok(selected) => {
             println!("Selected: {} Q{}", selected.year, selected.quarter);
 
-            // 讀取該季度的評論
-            let reviews = get_reviews_for_quarter(&selected);
+            // Read reviews for the selected quarter
+            let reviews_by_coworker = get_reviews_for_quarter(&selected);
 
-            if reviews.is_empty() {
+            if reviews_by_coworker.is_empty() {
                 println!("No reviews found for this quarter.");
             } else {
-                println!("\nFound {} reviews:", reviews.len());
-                for review in reviews {
-                    println!("\n--- {} - {} ---", review.date, review.coworker);
-                    println!("{}", review.content);
+                println!(
+                    "\nFound reviews for {} coworkers:",
+                    reviews_by_coworker.len()
+                );
+                for (coworker, reviews) in reviews_by_coworker {
+                    println!("\n=== Generated prompt for {} ===\n", coworker);
+                    let prompt = generate_review_prompt(&coworker, &reviews);
+                    println!("{}", prompt);
+                    println!("\n=== End of prompt for {} ===\n", coworker);
                 }
             }
         }
