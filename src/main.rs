@@ -1,6 +1,3 @@
-use anthropic::client::Client;
-use anthropic::config::AnthropicConfig;
-use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use chrono::Local;
 use chrono::{Datelike, NaiveDate};
 use dotenv::dotenv;
@@ -251,44 +248,48 @@ Work logs for review:
 }
 
 async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Load the environment variables from the .env file.
     dotenv().ok();
 
-    // Build from configuration.
-    let cfg = AnthropicConfig::new()?;
-    let client = Client::try_from(cfg)?;
+    let api_key = std::env::var("ANTHROPIC_API_KEY")?;
+    let client = reqwest::Client::new();
 
     let messages = vec![
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::Text {
-                text: "You are a professional HR consultant who specializes in performance review analysis. If reviewee is not manager, please skip manager's question. When evaluating performance, if no outstanding achievements or major issues are noted, please give a neutral score of 3 out of 5 to represent meeting basic expectations. Please be objective and fair in your assessment.".to_string(),
-            }],
-        },
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::Text {
-                text: prompt.to_string(),
-            }],
-        },
+        serde_json::json!({
+            "role": "user",
+            "content": "You are a professional HR consultant who specializes in performance review analysis. If reviewee is not manager, please skip manager's question. When evaluating performance, if no outstanding achievements or major issues are noted, please give a neutral score of 3 out of 5 to represent meeting basic expectations. Please be objective and fair in your assessment."
+        }),
+        serde_json::json!({
+            "role": "user",
+            "content": prompt
+        }),
     ];
 
-    let messages_request = MessagesRequestBuilder::default()
-        .messages(messages)
-        .model("claude-3-5-sonnet-20241022".to_string())
-        .max_tokens(1024usize)
-        .build()?;
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&serde_json::json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 1024,
+            "messages": messages
+        }))
+        .send()
+        .await?;
 
-    let response = client.messages(messages_request).await?;
+    if !response.status().is_success() {
+        return Err(format!("API request failed: {}", response.status()).into());
+    }
 
-    response
-        .content
-        .first()
-        .and_then(|block| match block {
-            ContentBlock::Text { text } => Some(text.clone()),
-            _ => None,
-        })
-        .ok_or_else(|| "No response content received".into())
+    let response_data: serde_json::Value = response.json().await?;
+
+    response_data
+        .get("content")
+        .and_then(|content| content.get(0))
+        .and_then(|first_content| first_content.get("text"))
+        .and_then(|text| text.as_str())
+        .map(String::from)
+        .ok_or_else(|| "Invalid response format".into())
 }
 
 #[tokio::main]
