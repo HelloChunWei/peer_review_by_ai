@@ -248,11 +248,13 @@ Work logs for review:
 }
 
 async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // use dot env to load key from .env
     dotenv().ok();
 
     let api_key = std::env::var("ANTHROPIC_API_KEY")?;
     let client = reqwest::Client::new();
 
+    // create prompt
     let messages = vec![
         serde_json::json!({
             "role": "user",
@@ -264,6 +266,7 @@ async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::E
         }),
     ];
 
+    // call API
     let response = client
         .post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", api_key)
@@ -281,6 +284,7 @@ async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::E
         return Err(format!("API request failed: {}", response.status()).into());
     }
 
+    // parse response to json
     let response_data: serde_json::Value = response.json().await?;
 
     response_data
