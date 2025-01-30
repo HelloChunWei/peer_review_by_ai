@@ -281,7 +281,6 @@ async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::E
 
     let response = client.messages(messages_request).await?;
 
-    // 从响应中提取文本
     response
         .content
         .first()
