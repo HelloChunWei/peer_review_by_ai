@@ -61,6 +61,15 @@ fn select_ai_service() -> Result<AiService, Box<dyn std::error::Error>> {
     Ok(ans)
 }
 
+// 1. select the quarter
+// 2. match ans
+// 3. select AI model
+// 4. match ai_service
+// 5. create review_results folder
+// 6. for loop to call API and get response
+// 7. match enum and call API
+// 8. write a file into folder
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ans = select_quarters();
