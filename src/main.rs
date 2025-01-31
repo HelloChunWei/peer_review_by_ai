@@ -1,5 +1,6 @@
 use chrono::Datelike;
 use chrono::Local;
+use futures::stream::{self, StreamExt};
 use inquire::InquireError;
 use inquire::Select;
 use peer_review_by_ai::Quarter;
@@ -38,6 +39,7 @@ fn select_quarters() -> Result<Quarter, InquireError> {
     Ok(ans)
 }
 
+#[derive(Clone)]
 enum AiService {
     OpenAI,
     Anthropic,
@@ -93,23 +95,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(service) => {
                         // Create review_results directory if it doesn't exist
                         fs::create_dir_all("review_results")?;
+                        // futures vector
+                        let mut futures = Vec::new();
 
                         for (coworker, reviews) in reviews_by_coworker {
-                            println!("\n=== Processing review for {} ===\n", coworker);
-
                             let prompt =
                                 peer_review_by_ai::generate_review_prompt(&coworker, &reviews);
-                            let review_result = match service {
-                                AiService::OpenAI => {
-                                    peer_review_by_ai::get_open_ai_review(&prompt).await
-                                }
-                                AiService::Anthropic => {
-                                    peer_review_by_ai::get_claude_review(&prompt).await
-                                }
+                            let coworker = coworker.clone();
+                            let service = service.clone();
+                            let selected = selected.clone();
+                            // Create an async task for each review
+                            let future = async move {
+                                println!("\n=== Processing review for {} ===\n", coworker);
+
+                                let review_result = match service {
+                                    AiService::OpenAI => {
+                                        peer_review_by_ai::get_open_ai_review(&prompt).await
+                                    }
+                                    AiService::Anthropic => {
+                                        peer_review_by_ai::get_claude_review(&prompt).await
+                                    }
+                                };
+                                // Return a tuple with all necessary data
+                                (coworker, review_result, service, selected)
                             };
+
+                            futures.push(future);
+                        }
+                        // Process futures concurrently with a limit of 4 concurrent tasks
+                        // This helps prevent overwhelming the API service
+                        let results = stream::iter(futures)
+                            .buffer_unordered(4)
+                            .collect::<Vec<_>>()
+                            .await;
+                        // Process the results after all futures complete
+                        for (coworker, review_result, service, selected) in results {
                             match review_result {
                                 Ok(review) => {
-                                    // Save to MD file
                                     let filename = format!(
                                         "review_results/{}_{}_{}_Q{}_review.md",
                                         service, selected.year, coworker, selected.quarter
@@ -117,8 +139,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                     fs::write(&filename, &review)?;
                                     println!("Review saved to: {}", filename);
-
-                                    // Print the review content
                                     println!("\nReview content for {}:", coworker);
                                     println!("{}", review);
                                     println!("\n=== End of review for {} ===\n", coworker);
@@ -128,9 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
-                        println!(
-                    "\nAll reviews have been processed and saved to the review_results directory."
-                );
+                        println!("\nAll reviews have been processed and saved to the review_results directory.");
                     }
                     Err(_) => println!("There was an error, please try again"),
                 }

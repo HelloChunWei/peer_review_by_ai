@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 // Debug trait - let me can println!("{:?}", Quarter)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Quarter {
     pub year: i32,
     pub quarter: u8,
