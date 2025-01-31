@@ -246,14 +246,7 @@ Work logs for review:
     )
 }
 
-pub async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // use dot env to load key from .env
-    dotenv().ok();
-
-    let api_key = std::env::var("ANTHROPIC_API_KEY")?;
-    let client = reqwest::Client::new();
-
-    // create prompt
+fn get_api_params(prompt: &str) -> Vec<serde_json::Value> {
     let messages = vec![
         serde_json::json!({
             "role": "user",
@@ -264,6 +257,18 @@ pub async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::erro
             "content": prompt
         }),
     ];
+    messages
+}
+
+pub async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // use dot env to load key from .env
+    dotenv().ok();
+
+    let api_key = std::env::var("ANTHROPIC_API_KEY")?;
+    let client = reqwest::Client::new();
+
+    // create prompt
+    let messages = get_api_params(prompt);
 
     // call API
     let response = client
@@ -299,5 +304,47 @@ pub async fn get_claude_review(prompt: &str) -> Result<String, Box<dyn std::erro
         .and_then(|text| text.as_str())
         .map(String::from)
         // .into() is a type conversion trait method in Rust that can automatically convert one type to another compatible type.
+        .ok_or_else(|| "Invalid response format".into())
+}
+
+pub async fn get_open_ai_review(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // use dot env to load key from .env
+    dotenv().ok();
+
+    let api_key = std::env::var("OPENAI_API_KEY")?;
+    let client = reqwest::Client::new();
+
+    // create prompt
+    let messages = get_api_params(prompt);
+
+    // call API
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 1024,
+            "temperature": 0.7
+        }))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(format!("API request failed: {}", response.status()).into());
+    }
+
+    // 解析響應
+    let response_data: serde_json::Value = response.json().await?;
+
+    // data structure: https://platform.openai.com/docs/api-reference/chat/create
+    response_data
+        .get("choices")
+        .and_then(|choices| choices.get(0))
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.as_str())
+        .map(String::from)
         .ok_or_else(|| "Invalid response format".into())
 }
