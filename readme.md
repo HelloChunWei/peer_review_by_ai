@@ -5,3 +5,13 @@
 3. Create `.env` file and add your key
 4. run `cargo run`
 5. select the quarter and AI provider
+
+
+
+
+
+https://github.com/user-attachments/assets/14c86a63-5a16-4c1c-ae99-47496d09fdb4
+
+
+
+
