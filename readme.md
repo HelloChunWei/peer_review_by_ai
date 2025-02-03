@@ -2,9 +2,9 @@
 
 1. Install Rust: [link](https://www.rust-lang.org/tools/install)
 2. Write down work logs with each colleague under reviews folder The filename must be: `yyyy-mm-dd-cowork-colleague.md` you can get more examples at `reviews` folder
-3. Create `.env` file and add your key
+3. Create `.env` file and add your key. you can get detail at `.env.example`
 4. run `cargo run`
-5. select the quarter and AI provider
+5. select the quarter and AI provider Currently providing Anthropic and OpenAI
 
 
 
