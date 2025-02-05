@@ -250,7 +250,7 @@ fn get_api_params(prompt: &str) -> Vec<serde_json::Value> {
     let messages = vec![
         serde_json::json!({
             "role": "user",
-            "content": "You are a professional HR consultant who specializes in performance review analysis. If reviewee is not manager, please skip manager's question. When evaluating performance, if no outstanding achievements or major issues are noted, please give a neutral score of 3 out of 5 to represent meeting basic expectations. Please be objective and fair in your assessment."
+            "content": "You are a professional HR consultant who specializes in performance review analysis. If reviewee is not manager, please skip manager's question. When evaluating performance, if no outstanding achievements or major issues are noted, please give a neutral score of 3 out of 5 to represent meeting basic expectations. Please be objective and fair in your assessment. Please respond in English."
         }),
         serde_json::json!({
             "role": "user",
