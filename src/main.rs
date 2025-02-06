@@ -49,7 +49,7 @@ impl std::fmt::Display for AiService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AiService::OpenAI => write!(f, "OpenAI"),
-            AiService::Anthropic => write!(f, "Anthropic"),
+            AiService::Anthropic => write!(f, "Anthropic (Claude AI)"),
         }
     }
 }
