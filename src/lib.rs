@@ -335,7 +335,6 @@ pub async fn get_open_ai_review(prompt: &str) -> Result<String, Box<dyn std::err
         return Err(format!("API request failed: {}", response.status()).into());
     }
 
-    // 解析響應
     let response_data: serde_json::Value = response.json().await?;
 
     // data structure: https://platform.openai.com/docs/api-reference/chat/create
